@@ -1,6 +1,6 @@
 module github.com/quitepicky/considered
 
-go 1.26
+go 1.26.0
 
 toolchain go1.26.3
 
@@ -8,7 +8,7 @@ require (
 	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/boyter/gocodewalker v1.5.2-0.20260227212453-19676720409f
 	github.com/boyter/scc/v3 v3.7.0
-	golang.org/x/sync v0.22.0
+	golang.org/x/sync v0.23.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
