@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { createReadStream } from "node:fs";
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { readFile, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 // Loopback only: WinGet cannot download a not-yet-published GitHub release.
@@ -24,5 +24,6 @@ const server = createServer(async (request, response) => {
   }
 });
 server.listen(0, "127.0.0.1", async () => {
-  await writeFile(readyFile, `http://127.0.0.1:${server.address().port}`);
+  await writeFile(`${readyFile}.tmp`, `http://127.0.0.1:${server.address().port}`);
+  await rename(`${readyFile}.tmp`, readyFile);
 });

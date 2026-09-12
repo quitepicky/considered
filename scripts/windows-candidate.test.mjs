@@ -127,7 +127,11 @@ test("loopback server serves only candidate archives and does not expose metadat
     const deadline = Date.now() + 5_000;
     while (!base) {
       try { base = await readFile(ready, "utf8"); } catch (error) {
-        if (error.code !== "ENOENT" || Date.now() > deadline || child.exitCode !== null) throw error;
+        if (error.code !== "ENOENT") throw error;
+      }
+      if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(base)) {
+        base = undefined;
+        if (Date.now() > deadline || child.exitCode !== null) throw new Error("Candidate server did not become ready");
         await new Promise((resolve) => setTimeout(resolve, 20));
       }
     }

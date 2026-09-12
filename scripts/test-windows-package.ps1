@@ -9,6 +9,8 @@ New-Item -ItemType Directory -Force $EvidenceDirectory | Out-Null
 Start-Transcript -Path (Join-Path $EvidenceDirectory 'transcript.txt')
 $server = $null
 $installed = $false
+$productCode = 'QuitePicky.Considered__DefaultSource'
+$registrationPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\$productCode"
 
 function Invoke-WinGetChecked {
     param([string[]]$Arguments, [switch]$Validation)
@@ -72,6 +74,13 @@ try {
     Invoke-WinGetChecked -Arguments @('install', '--manifest', $localManifest, '--accept-package-agreements',
         '--accept-source-agreements', '--disable-interactivity', '--verbose-logs')
     $installed = $true
+    $registration = Get-ItemProperty $registrationPath
+    if ($registration.WinGetPackageIdentifier -ne 'QuitePicky.Considered' -or
+        $registration.DisplayVersion -ne $version -or $registration.DisplayName -ne 'Considered') {
+        throw 'Installed package registration does not match candidate identity/version'
+    }
+    $registration | Select-Object WinGetPackageIdentifier, DisplayName, DisplayVersion, UninstallString |
+        ConvertTo-Json | Set-Content (Join-Path $EvidenceDirectory 'registration.json')
     $links = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'
     $env:PATH = "$links;$env:PATH"
     foreach ($command in @('considered', 'considered-scc')) {
@@ -89,14 +98,16 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Installed provider failed: $LASTEXITCODE" }
     $metrics | ConvertFrom-Json | Out-Null
     $metrics | Set-Content (Join-Path $EvidenceDirectory 'provider.json')
-    # Refresh community metadata, but do not filter the installed-package lookup
-    # by source: an unpublished local manifest is not in the community catalog yet.
+    # Local portable installs have an ARP ID until the package is in a catalog.
+    # Verify exact identity/version in its registration above, list by exact name,
+    # and uninstall by the product code recorded by WinGet (not a catalog ID).
     Invoke-WinGetChecked -Arguments @('source', 'update', '--name', 'winget', '--disable-interactivity')
-    Invoke-WinGetChecked -Arguments @('list', '--id', 'QuitePicky.Considered', '--exact',
+    Invoke-WinGetChecked -Arguments @('list', '--name', 'Considered', '--exact',
         '--accept-source-agreements', '--disable-interactivity')
-    Invoke-WinGetChecked -Arguments @('uninstall', '--id', 'QuitePicky.Considered', '--exact', '--version', $version,
+    Invoke-WinGetChecked -Arguments @('uninstall', '--product-code', $productCode,
         '--accept-source-agreements', '--disable-interactivity')
     $installed = $false
+    if (Test-Path $registrationPath) { throw 'Uninstall left the package registration' }
     foreach ($command in @('considered', 'considered-scc')) {
         if (Test-Path (Join-Path $links "$command.exe")) { throw "Uninstall left alias: $command" }
     }
@@ -106,7 +117,7 @@ try {
         Set-Content (Join-Path $EvidenceDirectory 'result.json')
 } finally {
     if ($installed) {
-        & winget uninstall --id QuitePicky.Considered --exact --accept-source-agreements --disable-interactivity
+        & winget uninstall --product-code $productCode --accept-source-agreements --disable-interactivity
     }
     if ($null -ne $server -and -not $server.HasExited) { Stop-Process -Id $server.Id -ErrorAction Continue }
     $logDirectory = Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.DesktopAppInstaller_8wekyb3d8bbwe\LocalState\DiagOutputDir'
