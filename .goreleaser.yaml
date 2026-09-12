@@ -9,6 +9,7 @@ builds:
     goos: [linux, darwin, windows]
     goarch: [amd64, arm64]
     flags: [-trimpath]
+    mod_timestamp: "{{ .CommitTimestamp }}"
     ldflags:
       - -s -w -X main.versionOverride={{ .Tag }}
   - id: considered-scc
@@ -18,6 +19,7 @@ builds:
     goos: [linux, darwin, windows]
     goarch: [amd64, arm64]
     flags: [-trimpath]
+    mod_timestamp: "{{ .CommitTimestamp }}"
     ldflags: [-s -w]
 
 archives:
@@ -30,10 +32,16 @@ archives:
       - goos: windows
         formats: [zip]
     files:
-      - README.md
-      - LICENSE
+      - src: README.md
+        info:
+          mtime: "{{ .CommitDate }}"
+      - src: LICENSE
+        info:
+          mtime: "{{ .CommitDate }}"
       - src: third_party/scc/LICENSE
         dst: LICENSE-scc
+        info:
+          mtime: "{{ .CommitDate }}"
 
 checksum:
   name_template: checksums.txt

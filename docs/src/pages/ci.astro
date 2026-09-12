@@ -96,5 +96,19 @@ considered check --sarif`;
       Update the version and checksum together when upgrading.
     </p>
     <CodeBlock lang="yaml" code={githubActionsSnippet} />
+
+    <h2>Considered's Windows release checks</h2>
+    <p>
+      Considered's own release workflow requires native x64 and ARM64 Windows
+      jobs to validate and install its WinGet package before publishing. The
+      jobs check both command aliases, the installed version, the bundled
+      provider, package registration, and uninstall. The unpublished ZIPs are
+      served over loopback for installation with their original checksums;
+      this does not replace Microsoft's public-URL validation or malware scans.
+      The publishing rebuild must match the tested Windows artifacts before the
+      GitHub release becomes public. See the
+      <a href="https://github.com/quitepicky/considered/blob/main/RELEASING.md">release guide</a>
+      for test evidence and the distinction between submission and acceptance.
+    </p>
   </article>
 </DocsLayout>

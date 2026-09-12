@@ -7,6 +7,12 @@ on:
   pull_request:
 
 jobs:
+  windows-package:
+    uses: ./.github/workflows/windows-package.yml
+    permissions:
+      contents: read
+    with:
+      ref: ${{ github.sha }}
   build:
     runs-on: ubuntu-latest
     steps:
