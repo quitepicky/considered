@@ -1,9 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { checkManifests, compareCandidates, readCandidate, verifyUploadedArchives } from "./windows-candidate.mjs";
 
 const tag = "v1.2.3";
@@ -108,4 +111,40 @@ test("CI and every release use the Windows gate; publication has no bypass condi
   assert.match(gate, /runner: windows-2025/);
   assert.match(gate, /runner: windows-11-arm/);
   assert.doesNotMatch(gate, /continue-on-error:|secrets\./);
+});
+
+test("loopback server serves only candidate archives and does not expose metadata", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "considered-server-test-"));
+  let child;
+  try {
+    const candidate = fixture();
+    await writeFile(join(dir, "candidate.json"), JSON.stringify(candidate));
+    for (const archive of candidate.archives) await writeFile(join(dir, archive.name), bytes);
+    const ready = join(dir, "ready.txt");
+    child = spawn(process.execPath, [fileURLToPath(new URL("./serve-windows-candidate.mjs", import.meta.url)), dir, ready]);
+    child.on("error", () => {});
+    let base;
+    const deadline = Date.now() + 5_000;
+    while (!base) {
+      try { base = await readFile(ready, "utf8"); } catch (error) {
+        if (error.code !== "ENOENT" || Date.now() > deadline || child.exitCode !== null) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+    }
+    assert.match(base, /^http:\/\/127\.0\.0\.1:\d+$/);
+    const download = await fetch(`${base}/${candidate.archives[0].name}`);
+    assert.equal(download.status, 200);
+    assert.deepEqual(Buffer.from(await download.arrayBuffer()), bytes);
+    for (const path of ["/candidate.json", "/manifest/QuitePicky.Considered.yaml", "/missing.zip"]) {
+      assert.equal((await fetch(`${base}${path}`)).status, 404);
+    }
+    assert.equal((await fetch(`${base}/${candidate.archives[0].name}`, { method: "POST" })).status, 404);
+  } finally {
+    if (child && child.exitCode === null) {
+      const stopped = once(child, "exit");
+      child.kill();
+      await stopped;
+    }
+    await rm(dir, { recursive: true, force: true });
+  }
 });

@@ -104,6 +104,7 @@ jobs:
       - name: Validate and install local WinGet manifests
         shell: powershell
         run: |
+          ./scripts/test-winget-command.ps1
           ./scripts/test-windows-package.ps1 `
             -CandidateDirectory "$env:RUNNER_TEMP/windows-candidate" `
             -EvidenceDirectory "$env:RUNNER_TEMP/windows-evidence" `

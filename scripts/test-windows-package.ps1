@@ -89,12 +89,13 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Installed provider failed: $LASTEXITCODE" }
     $metrics | ConvertFrom-Json | Out-Null
     $metrics | Set-Content (Join-Path $EvidenceDirectory 'provider.json')
-    # Refresh only the community source, avoiding unrelated Microsoft Store agreement failures.
+    # Refresh community metadata, but do not filter the installed-package lookup
+    # by source: an unpublished local manifest is not in the community catalog yet.
     Invoke-WinGetChecked -Arguments @('source', 'update', '--name', 'winget', '--disable-interactivity')
-    Invoke-WinGetChecked -Arguments @('list', '--id', 'QuitePicky.Considered', '--exact', '--source', 'winget',
+    Invoke-WinGetChecked -Arguments @('list', '--id', 'QuitePicky.Considered', '--exact',
         '--accept-source-agreements', '--disable-interactivity')
     Invoke-WinGetChecked -Arguments @('uninstall', '--id', 'QuitePicky.Considered', '--exact', '--version', $version,
-        '--disable-interactivity')
+        '--accept-source-agreements', '--disable-interactivity')
     $installed = $false
     foreach ($command in @('considered', 'considered-scc')) {
         if (Test-Path (Join-Path $links "$command.exe")) { throw "Uninstall left alias: $command" }
@@ -105,7 +106,7 @@ try {
         Set-Content (Join-Path $EvidenceDirectory 'result.json')
 } finally {
     if ($installed) {
-        & winget uninstall --id QuitePicky.Considered --exact --disable-interactivity
+        & winget uninstall --id QuitePicky.Considered --exact --accept-source-agreements --disable-interactivity
     }
     if ($null -ne $server -and -not $server.HasExited) { Stop-Process -Id $server.Id -ErrorAction Continue }
     $logDirectory = Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.DesktopAppInstaller_8wekyb3d8bbwe\LocalState\DiagOutputDir'
