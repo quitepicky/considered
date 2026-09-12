@@ -14,7 +14,13 @@ concurrency:
   group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
   cancel-in-progress: false
 jobs:
+  windows-package:
+    uses: ./.github/workflows/windows-package.yml
+    with:
+      ref: refs/tags/${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      tag: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
   release:
+    needs: windows-package
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -39,6 +45,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/considered-publication-tools"
           cp scripts/*.mjs "$RUNNER_TEMP/considered-publication-tools/"
+          cp -R .github/workflows "$RUNNER_TEMP/considered-publication-tools/workflows"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: refs/tags/${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
@@ -48,6 +55,14 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+      - name: Refuse a tag changed since Windows validation
+        env:
+          TESTED_SHA: ${{ needs.windows-package.outputs.source-sha }}
+        run: test "$(git rev-parse HEAD)" = "$TESTED_SHA"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: windows-candidate-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/windows-candidate
       - name: Verify package publishing credentials
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
@@ -67,6 +82,8 @@ jobs:
         with:
           node-version: 24
       - name: Test publication verifier
+        env:
+          PUBLICATION_WORKFLOW_DIRECTORY: ${{ runner.temp }}/considered-publication-tools/workflows
         run: node --test "$RUNNER_TEMP"/considered-publication-tools/*.test.mjs
       - name: Refuse to overwrite an already-published release
         env:
@@ -90,14 +107,33 @@ jobs:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
         run: node "$RUNNER_TEMP/considered-publication-tools/verify-publication.mjs"
+      - name: Require published Windows artifacts to match the tested candidate
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          node "$RUNNER_TEMP/considered-publication-tools/windows-candidate.mjs"
+          verify dist "$RUNNER_TEMP/windows-candidate" "$RELEASE_TAG"
       - name: Publish verified GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
         run: gh release edit "$RELEASE_TAG" --repo quitepicky/considered --draft=false
-      - name: Escalate failed publication to Garden
-        if: failure()
+  report-failure:
+    needs: [windows-package, release]
+    if: ${{ always() && (needs.windows-package.result == 'failure' || needs.release.result == 'failure') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - name: Escalate failed Windows gate or publication to Garden
         env:
           GARDEN_PUBLICATION_KEY: ${{ secrets.GARDEN_PUBLICATION_KEY }}
           PUBLICATION_FAILURE: Considered release workflow failed; inspect this run and repair the existing tag before publishing.
-        run: node "$RUNNER_TEMP/considered-publication-tools/publication-health.mjs"
+        run: node scripts/publication-health.mjs

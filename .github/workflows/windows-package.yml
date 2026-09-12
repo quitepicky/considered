@@ -1,0 +1,119 @@
+name: Windows package gate
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: true
+      tag:
+        type: string
+        default: ""
+    outputs:
+      source-sha:
+        value: ${{ jobs.candidate.outputs.source-sha }}
+permissions:
+  contents: read
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      source-sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Preserve trusted candidate tooling
+        run: |
+          mkdir -p "$RUNNER_TEMP/considered-publication-tools"
+          cp scripts/*.mjs "$RUNNER_TEMP/considered-publication-tools/"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+      - name: Identify immutable candidate source
+        id: source
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          if [ -z "$RELEASE_TAG" ]; then
+            RELEASE_TAG="v0.0.0-ci.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
+            git tag "$RELEASE_TAG"
+          else
+            [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+            test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$(git rev-parse HEAD)"
+          fi
+          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - name: Build release candidate without publishing
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
+        with:
+          distribution: goreleaser
+          version: v2.18.0
+          args: release --clean --skip=publish
+        env:
+          GORELEASER_CURRENT_TAG: ${{ env.RELEASE_TAG }}
+          GITHUB_TOKEN: ${{ github.token }}
+          HOMEBREW_TAP_TOKEN: ""
+          WINGET_TOKEN: ""
+      - name: Verify and collect Windows artifacts
+        run: >-
+          node "$RUNNER_TEMP/considered-publication-tools/windows-candidate.mjs"
+          prepare dist "$RUNNER_TEMP/windows-candidate" "$RELEASE_TAG"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-candidate-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/windows-candidate
+          if-no-files-found: error
+          retention-days: 14
+  install:
+    name: WinGet validate and install (${{ matrix.arch }})
+    needs: candidate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            arch: amd64
+          - runner: windows-11-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: windows-candidate-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/windows-candidate
+      - name: Validate and install local WinGet manifests
+        shell: powershell
+        run: |
+          ./scripts/test-winget-command.ps1
+          ./scripts/test-windows-package.ps1 `
+            -CandidateDirectory "$env:RUNNER_TEMP/windows-candidate" `
+            -EvidenceDirectory "$env:RUNNER_TEMP/windows-evidence" `
+            -Architecture '${{ matrix.arch }}'
+      - name: Preserve Windows evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-evidence-${{ matrix.arch }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/windows-evidence
+          if-no-files-found: error
+          retention-days: 14
