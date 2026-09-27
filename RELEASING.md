@@ -41,6 +41,43 @@ must be installed by the Homebrew cask.
 
 ## Publish
 
+### Required Windows package gate
+
+For our WinGet checklist, "local" means a local manifest tested on a GitHub-hosted
+Windows runner controlled by this repository. Both ordinary CI and every Release
+invocation call `windows-package.yml`. It builds a non-published GoReleaser
+candidate, then requires native x64 and ARM64 jobs to validate the original
+three-file schema-1.12 manifest set, run `winget install --manifest`, verify both
+portable aliases and the installed version, exercise the bundled provider,
+check `winget list`, and uninstall. Command failures fail the job; WinGet's
+explicit success-with-warning validation status is retained as a warning.
+
+The install test changes only the URLs in a manifest copy to a loopback-only
+server serving the candidate ZIPs. Original SHA256 values and nested paths stay
+unchanged and enforced. This allows testing before public download URLs exist;
+it does not claim those URLs are live or replace Microsoft's upstream scans.
+No Defender exclusions or scan bypasses are added. The runner's inherited
+Defender settings are not evidence of a comprehensive malware assessment.
+
+The publishing job depends on the entire gate succeeding and rejects tag changes
+after validation. Archive timestamps are pinned to the source commit so the
+publishing rebuild is reproducible. Before exposing the draft, the workflow
+compares both Windows ZIPs and generated manifests against the tested candidate,
+and checks GitHub's uploaded asset digests. Only the manifest's build-date field
+may differ. A mismatch leaves the release in draft and fails the workflow.
+This gate applies to stable releases, prereleases, tag pushes, and manual release
+dispatches. It is a workflow dependency, not merely an optional PR status check.
+Old tags without reproducible archive settings may fail the equality check;
+do not bypass it or retag a release to hide the failure.
+
+Each run retains `windows-candidate-*` and per-architecture `windows-evidence-*`
+artifacts for 14 days, including original/local manifests, transcript, WinGet logs,
+and a success record written only after all tests pass. Link that run when
+checking the WinGet validation/install checkboxes. CLA and duplicate-PR/issue
+checks remain submission-specific and are not inferred from a Windows CI pass.
+
+### Release procedure
+
 After CI and review pass, choose the next unused version. Garden calls the
 existing `Prepare Release` workflow with `version=vMAJOR.MINOR.PATCH`; this tags
 the selected branch and dispatches `Release` with that tag. Manual tag pushes
