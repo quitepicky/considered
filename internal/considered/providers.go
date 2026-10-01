@@ -257,7 +257,7 @@ func SubjectPath(root, path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if strings.HasPrefix(rel, "..") {
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", errors.New("path is outside root")
 	}
 	return filepath.ToSlash(rel), nil
