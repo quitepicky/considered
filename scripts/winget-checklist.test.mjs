@@ -93,6 +93,8 @@ test("checks six supported items, preserves wording and the issue placeholder, a
   assert.match(body, /Mac \(macOS\)/);
   assert.match(body, /Installation used loopback URLs/);
   assert.equal(updateBody(body, evidence), body);
+  const upper = template.replaceAll("- [ ]", "- [X]");
+  assert.equal(updateBody(upper, evidence).split("\n\n<!-- considered-windows-evidence -->")[0], upper);
   assert.throws(() => updateBody(template.replace("Validated manifest locally", "Unrecognized template"), evidence));
   assert.throws(() => updateBody(template + "\n<!-- considered-windows-evidence -->", evidence));
 });

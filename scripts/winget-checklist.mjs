@@ -30,7 +30,7 @@ export function updateBody(body, { tag, head, runId, attempt, results, cla, noDu
   if (noDuplicate) required.push("Checked that there aren't other open ");
   for (const prefix of required) {
     const lines = body.split("\n");
-    const matches = lines.flatMap((line, index) => /^- \[[ x]\] /.test(line) && line.slice(6).startsWith(prefix) ? [index] : []);
+    const matches = lines.flatMap((line, index) => /^- \[[ xX]\] /.test(line) && line.slice(6).startsWith(prefix) ? [index] : []);
     assert.equal(matches.length, 1, `Unrecognized or duplicate checklist item: ${prefix}`);
     const index = matches[0];
     lines[index] = lines[index].replace("- [ ] ", "- [x] ");
