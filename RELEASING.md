@@ -96,6 +96,24 @@ branch; changes to its diagnostic files also run it on pull requests. Artifacts
 named `startup-repro-*` contain the original manifests, hashes, WinGet logs, and
 per-command results. It never publishes a release or modifies the upstream PR.
 
+Before publishing the verified draft, Release downloads both native Windows success records from
+that same run and updates the upstream WinGet PR's supported checklist claims.
+It verifies the tag, architecture, archive hashes, and all three submitted
+manifest files against the tested candidate before checking validation,
+installation, single-manifest, and schema items. Commentary explicitly says
+we develop on macOS and use our controlled Windows CI runners for local tests;
+candidate installs use loopback URLs, not the public download URLs.
+
+The CLA item is checked only when Microsoft's check for that submission head
+succeeds; duplicate-search claims require a complete search and file inspection.
+Pending CLA and issue-link assertions remain untouched for human follow-up.
+Template wording and other commentary are preserved; repeated updates replace
+only the marked evidence block. A changed head, concurrent description edit,
+unexpected template, or missing/mismatched evidence fails the step, keeps the
+release in draft, and routes the failure to Garden attention. Repair the failure
+and retry the existing tag; do not retag it. This automation never approves or
+merges upstream PRs.
+
 ### Release procedure
 
 After CI and review pass, choose the next unused version. Garden calls the
