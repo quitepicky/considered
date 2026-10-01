@@ -1,0 +1,65 @@
+name: WinGet 0.1.12 startup reproduction
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/winget-startup-repro.yml
+      - scripts/prepare-winget-startup-repro.mjs
+      - scripts/test-cli-startup*
+      - scripts/test-windows-package.ps1
+      - scripts/test-windows-wmi.ps1
+permissions:
+  contents: read
+jobs:
+  reproduce:
+    name: Released 0.1.12 (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            arch: amd64
+          - runner: windows-11-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - name: Probe the validator's .NET Framework WMI API separately
+        shell: powershell
+        timeout-minutes: 2
+        run: ./scripts/test-windows-wmi.ps1 -EvidenceDirectory "$env:RUNNER_TEMP/startup-evidence"
+      - name: Fetch immutable released archives and verify manifest hashes
+        shell: powershell
+        run: node scripts/prepare-winget-startup-repro.mjs "$env:RUNNER_TEMP/released-candidate"
+      - name: Probe direct executables before installation
+        shell: powershell
+        run: |
+          $arch = '${{ matrix.arch }}'
+          $stem = "considered_v0.1.12_windows_$arch"
+          Expand-Archive "$env:RUNNER_TEMP/released-candidate/$stem.zip" "$env:RUNNER_TEMP/expanded"
+          node scripts/test-cli-startup.mjs "$env:RUNNER_TEMP/expanded/$stem" `
+            "$env:RUNNER_TEMP/startup-evidence/direct" v0.1.12
+      - name: Install original public URLs and probe installed WinGet aliases
+        shell: powershell
+        run: |
+          ./scripts/test-windows-package.ps1 `
+            -CandidateDirectory "$env:RUNNER_TEMP/released-candidate" `
+            -EvidenceDirectory "$env:RUNNER_TEMP/startup-evidence/installed" `
+            -Architecture '${{ matrix.arch }}' -UsePublishedUrls
+      - name: Preserve original manifests and diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: startup-repro-${{ matrix.arch }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/startup-evidence
+            ${{ runner.temp }}/released-candidate/manifest
+            ${{ runner.temp }}/released-candidate/candidate.json
+          if-no-files-found: error
+          retention-days: 14
