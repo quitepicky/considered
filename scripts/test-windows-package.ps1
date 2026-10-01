@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory)][string]$CandidateDirectory,
     [Parameter(Mandatory)][string]$EvidenceDirectory,
-    [Parameter(Mandatory)][ValidateSet('amd64', 'arm64')][string]$Architecture
+    [Parameter(Mandatory)][ValidateSet('amd64', 'arm64')][string]$Architecture,
+    [switch]$UsePublishedUrls
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -46,30 +47,35 @@ try {
     $original = Join-Path $CandidateDirectory 'manifest'
     Invoke-WinGetChecked -Arguments @('validate', '--manifest', $original) -Validation
 
-    $ready = Join-Path $EvidenceDirectory 'server-url.txt'
-    $node = (Get-Command node).Source
-    $serverScript = Join-Path $PSScriptRoot 'serve-windows-candidate.mjs'
-    $server = Start-Process -FilePath $node -PassThru -WindowStyle Hidden -ArgumentList @(
-        "`"$serverScript`"", "`"$CandidateDirectory`"", "`"$ready`""
-    ) -RedirectStandardOutput (Join-Path $EvidenceDirectory 'server.stdout.txt') `
-      -RedirectStandardError (Join-Path $EvidenceDirectory 'server.stderr.txt')
-    $deadline = (Get-Date).AddSeconds(30)
-    while (-not (Test-Path $ready)) {
-        if ($server.HasExited -or (Get-Date) -gt $deadline) { throw 'Candidate server did not start' }
-        Start-Sleep -Milliseconds 200
+    $localManifest = $original
+    $transport = 'published-https'
+    if (-not $UsePublishedUrls) {
+        $transport = 'loopback'
+        $ready = Join-Path $EvidenceDirectory 'server-url.txt'
+        $node = (Get-Command node).Source
+        $serverScript = Join-Path $PSScriptRoot 'serve-windows-candidate.mjs'
+        $server = Start-Process -FilePath $node -PassThru -WindowStyle Hidden -ArgumentList @(
+            "`"$serverScript`"", "`"$CandidateDirectory`"", "`"$ready`""
+        ) -RedirectStandardOutput (Join-Path $EvidenceDirectory 'server.stdout.txt') `
+          -RedirectStandardError (Join-Path $EvidenceDirectory 'server.stderr.txt')
+        $deadline = (Get-Date).AddSeconds(30)
+        while (-not (Test-Path $ready)) {
+            if ($server.HasExited -or (Get-Date) -gt $deadline) { throw 'Candidate server did not start' }
+            Start-Sleep -Milliseconds 200
+        }
+        $base = (Get-Content $ready -Raw).Trim()
+        if ($base -notmatch '^http://127\.0\.0\.1:\d+$') { throw 'Expected loopback-only server' }
+        $localManifest = Join-Path $EvidenceDirectory 'install-manifest'
+        Copy-Item $original $localManifest -Recurse
+        $installerFile = Join-Path $localManifest 'QuitePicky.Considered.installer.yaml'
+        $installer = Get-Content $installerFile -Raw
+        foreach ($archive in $candidate.archives) {
+            if (-not $installer.Contains($archive.url)) { throw 'Expected original installer URL' }
+            $installer = $installer.Replace($archive.url, "$base/$($archive.name)")
+        }
+        # Only the URL is substituted. The tested package hash and nested paths are unchanged.
+        [System.IO.File]::WriteAllText($installerFile, $installer)
     }
-    $base = (Get-Content $ready -Raw).Trim()
-    if ($base -notmatch '^http://127\.0\.0\.1:\d+$') { throw 'Expected loopback-only server' }
-    $localManifest = Join-Path $EvidenceDirectory 'install-manifest'
-    Copy-Item $original $localManifest -Recurse
-    $installerFile = Join-Path $localManifest 'QuitePicky.Considered.installer.yaml'
-    $installer = Get-Content $installerFile -Raw
-    foreach ($archive in $candidate.archives) {
-        if (-not $installer.Contains($archive.url)) { throw 'Expected original installer URL' }
-        $installer = $installer.Replace($archive.url, "$base/$($archive.name)")
-    }
-    # Only the URL is substituted. The tested package hash and nested paths are unchanged.
-    [System.IO.File]::WriteAllText($installerFile, $installer)
     Invoke-WinGetChecked -Arguments @('validate', '--manifest', $localManifest) -Validation
     Invoke-WinGetChecked -Arguments @('install', '--manifest', $localManifest, '--accept-package-agreements',
         '--accept-source-agreements', '--disable-interactivity', '--verbose-logs')
@@ -88,16 +94,8 @@ try {
         if (-not (Test-Path $alias)) { throw "Missing installed alias: $command" }
         if ((Get-Command $command).Source -ne $alias) { throw "Wrong command resolved for $command" }
     }
-    $actualVersion = & considered --version
-    if ($LASTEXITCODE -ne 0 -or $actualVersion.Trim() -ne $candidate.tag) { throw 'Installed version mismatch' }
-    Write-Output "Installed considered version: $actualVersion"
-    $fixture = Join-Path $EvidenceDirectory 'fixture'
-    New-Item -ItemType Directory -Force $fixture | Out-Null
-    'package example' | Set-Content (Join-Path $fixture 'example.go')
-    $metrics = & considered-scc --json --root $fixture
-    if ($LASTEXITCODE -ne 0) { throw "Installed provider failed: $LASTEXITCODE" }
-    $metrics | ConvertFrom-Json | Out-Null
-    $metrics | Set-Content (Join-Path $EvidenceDirectory 'provider.json')
+    & node (Join-Path $PSScriptRoot 'test-cli-startup.mjs') $links $EvidenceDirectory $candidate.tag
+    if ($LASTEXITCODE -ne 0) { throw 'Installed CLI startup assertions failed; see cli-startup.json' }
     # Local portable installs have an ARP ID until the package is in a catalog.
     # Verify exact identity/version in its registration above, list by exact name,
     # and uninstall by the product code recorded by WinGet (not a catalog ID).
@@ -112,7 +110,7 @@ try {
         if (Test-Path (Join-Path $links "$command.exe")) { throw "Uninstall left alias: $command" }
     }
     [ordered]@{ tag = $candidate.tag; architecture = $Architecture; result = 'passed';
-        originalManifestValidated = $true; installationTransport = 'loopback';
+        originalManifestValidated = $true; installationTransport = $transport;
         archives = $candidate.archives } | ConvertTo-Json -Depth 6 |
         Set-Content (Join-Path $EvidenceDirectory 'result.json')
 } finally {

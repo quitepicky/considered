@@ -52,6 +52,16 @@ const varianceCommand = `considered variance add \\
     <h2><code>considered version</code></h2>
     <p>Prints the CLI version. <code>--version</code> and <code>-v</code> are aliases.</p>
 
+    <h2>Startup and usage errors</h2>
+    <p>
+      Running <code>considered</code> without a command prints usage to stderr and
+      exits with status 2. Use <code>considered --help</code> or
+      <code>considered --version</code> for a successful startup check.
+      The bundled provider requires <code>considered-scc --json --root &lt;dir&gt;</code>;
+      without arguments it prints <code>--json is required</code> and exits with status 2.
+      These are application usage errors, not missing-executable errors.
+    </p>
+
     <h2>Common flags</h2>
     <table>
       <thead>
