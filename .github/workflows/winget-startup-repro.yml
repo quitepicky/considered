@@ -35,6 +35,8 @@ jobs:
         timeout-minutes: 2
         run: ./scripts/test-windows-wmi.ps1 -EvidenceDirectory "$env:RUNNER_TEMP/startup-evidence"
       - name: Fetch immutable released archives and verify manifest hashes
+        id: prepare
+        if: ${{ !cancelled() }}
         shell: powershell
         run: node scripts/prepare-winget-startup-repro.mjs "$env:RUNNER_TEMP/released-candidate"
       - name: Probe direct executables before installation
@@ -46,6 +48,7 @@ jobs:
           node scripts/test-cli-startup.mjs "$env:RUNNER_TEMP/expanded/$stem" `
             "$env:RUNNER_TEMP/startup-evidence/direct" v0.1.12
       - name: Install original public URLs and probe installed WinGet aliases
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         shell: powershell
         run: |
           ./scripts/test-windows-package.ps1 `
