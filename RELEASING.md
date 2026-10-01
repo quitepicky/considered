@@ -76,6 +76,26 @@ and a success record written only after all tests pass. Link that run when
 checking the WinGet validation/install checkboxes. CLA and duplicate-PR/issue
 checks remain submission-specific and are not inferred from a Windows CI pass.
 
+The gate also records bounded executable launches in `cli-startup.json`, including
+stdout, stderr, and exit status. Invoking either executable with no arguments
+intentionally returns usage status 2: `considered` needs a subcommand and
+`considered-scc` needs `--json`. Version/help and an actual provider collection
+must succeed. An application exit code is not automatically a Win32 system error
+with the same number, and a failed process launch is checked separately.
+
+`WinGet 0.1.12 startup reproduction` tests the immutable archives and manifest
+commit from microsoft/winget-pkgs#433927 on native x64 and ARM64 runners. Unlike
+the unpublished candidate gate, it installs the original public HTTPS URLs.
+It captures both direct and installed-alias probes, plus a separate read-only
+.NET Framework WMI probe for the validator's process-cleanup error. A WMI result
+describes our runner only, not Microsoft's validator environment. No Defender
+settings are changed by this diagnostic, and it is not a malware assessment.
+
+Run the reproduction via its manual Actions dispatch after it is on the default
+branch; changes to its diagnostic files also run it on pull requests. Artifacts
+named `startup-repro-*` contain the original manifests, hashes, WinGet logs, and
+per-command results. It never publishes a release or modifies the upstream PR.
+
 ### Release procedure
 
 After CI and review pass, choose the next unused version. Garden calls the

@@ -161,6 +161,20 @@ func TestSubjectPathRejectsOutsidePath(t *testing.T) {
 	}
 }
 
+func TestSubjectPathAllowsDotDotPrefixedName(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "..cache", "data.txt")
+
+	got, err := SubjectPath(root, path)
+	if err != nil {
+		t.Fatalf("SubjectPath returned an error for an in-root path: %v", err)
+	}
+	want := filepath.ToSlash(filepath.Join("..cache", "data.txt"))
+	if got != want {
+		t.Fatalf("SubjectPath = %q, want %q", got, want)
+	}
+}
+
 func TestCollectAllHandlesEmptyAndProviderErrors(t *testing.T) {
 	records, err := CollectAll(context.Background(), t.TempDir(), nil)
 	if err != nil || records != nil {
