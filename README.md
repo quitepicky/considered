@@ -17,16 +17,23 @@ explicit and preserve the rationale behind unusual structures.
 
 ## Quick Start
 
-Install the published release with Homebrew:
+Install on macOS with Homebrew:
 
 ```sh
 brew install --cask quitepicky/tap/considered
 ```
 
-This installs both `considered` and `considered-scc`. Release archives are also
-available from [GitHub Releases](https://github.com/quitepicky/considered/releases).
-WinGet support is configured as `QuitePicky.Considered`; it becomes available
-after the first manifest submission is accepted into the community repository.
+Or install on Windows x64 or ARM64 with WinGet:
+
+```powershell
+winget install --id QuitePicky.Considered --exact --source winget
+```
+
+Both packages install `considered` and `considered-scc`. On Windows, open a new
+terminal if needed, then run `considered --version` to verify installation.
+See the [Windows installation guide](https://considered.quitepicky.dev/quick-start/#windows)
+for upgrade, uninstall, and troubleshooting instructions. Release archives are
+also available from [GitHub Releases](https://github.com/quitepicky/considered/releases).
 
 ### Build from source
 
