@@ -41,17 +41,37 @@ const varianceCommand = `considered variance add \\
       and <code>considered-scc</code> on your <code>PATH</code>.
     </p>
 
-    <h2>Windows</h2>
+    <h2 id="windows">Install on Windows with WinGet</h2>
     <p>
-      Download the Windows archive from
-      <a href="https://github.com/quitepicky/considered/releases">GitHub Releases</a>,
+      In PowerShell or Windows Terminal, install the published package from the
+      WinGet community repository:
+    </p>
+    <CodeBlock lang="powershell" code={"winget install --id QuitePicky.Considered --exact --source winget"} />
+    <p>
+      The package includes <code>considered.exe</code> and
+      <code>considered-scc.exe</code> for Windows x64 and ARM64. WinGet selects
+      the appropriate architecture and registers both command aliases.
+      Open a new terminal after installation if the commands are not found.
+    </p>
+    <CodeBlock lang="powershell" code={"considered --version\nconsidered --help"} />
+    <p>
+      If <code>winget</code> is unavailable, follow Microsoft's
+      <a href="https://learn.microsoft.com/en-us/windows/package-manager/winget/">WinGet installation instructions</a>.
+      If the package cannot be found, refresh the community source with
+      <code>winget source update --name winget</code> and retry.
+    </p>
+    <h3>Update or uninstall</h3>
+    <p>Upgrade to the latest version published in WinGet:</p>
+    <CodeBlock lang="powershell" code={"winget upgrade --id QuitePicky.Considered --exact --source winget"} />
+    <p>To uninstall, remove the command aliases, and delete the portable package files:</p>
+    <CodeBlock lang="powershell" code={"winget uninstall --id QuitePicky.Considered --exact --source winget --purge"} />
+    <h3>Manual Windows installation</h3>
+    <p>
+      Alternatively, download the Windows archive from
+      <a href="https://github.com/quitepicky/considered/releases/latest">GitHub Releases</a>,
       extract it, and add the directory containing both executables to your
       <code>PATH</code>. Choose <code>amd64</code> for x64 or <code>arm64</code>
       for Windows on Arm, and verify the archive against <code>checksums.txt</code>.
-      The WinGet submission for
-      <code>QuitePicky.Considered</code> is
-      <a href="https://github.com/microsoft/winget-pkgs/pull/430077">awaiting community review</a>.
-      Until it is accepted and indexed, use the release archive.
     </p>
 
     <h2>Install from source</h2>
