@@ -63,8 +63,8 @@ const varianceCommand = `considered variance add \\
     <h3>Update or uninstall</h3>
     <p>Upgrade to the latest version published in WinGet:</p>
     <CodeBlock lang="powershell" code={"winget upgrade --id QuitePicky.Considered --exact --source winget"} />
-    <p>To remove the package and its command aliases:</p>
-    <CodeBlock lang="powershell" code={"winget uninstall --id QuitePicky.Considered --exact --source winget"} />
+    <p>To uninstall, remove the command aliases, and delete the portable package files:</p>
+    <CodeBlock lang="powershell" code={"winget uninstall --id QuitePicky.Considered --exact --source winget --purge"} />
     <h3>Manual Windows installation</h3>
     <p>
       Alternatively, download the Windows archive from
