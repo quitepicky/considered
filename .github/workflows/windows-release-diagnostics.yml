@@ -1,0 +1,53 @@
+name: Windows release diagnostics
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/windows-release-diagnostics.yml
+      - scripts/windows-release-diagnostics.ps1
+      - scripts/windows-standard-user.ps1
+      - scripts/windows-standard-install.ps1
+      - scripts/windows-full-scan.ps1
+      - scripts/windows-defender-setup.ps1
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [windows-2025, windows-11-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Diagnose immutable v0.1.11 publication
+        # Defender and Appx are native Windows PowerShell modules; avoid the
+        # stale compatibility-remoting session after Defender updates itself.
+        shell: powershell
+        run: ./scripts/windows-release-diagnostics.ps1
+      - name: Preserve installation evidence before full scan
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: installation-evidence-${{ matrix.runner }}
+          path: ${{ runner.temp }}/considered-diagnostics
+          retention-days: 7
+          if-no-files-found: error
+      - name: Full post-install Defender scan
+        if: always()
+        shell: powershell
+        run: ./scripts/windows-full-scan.ps1 -Evidence "$env:RUNNER_TEMP/considered-diagnostics"
+      - name: Preserve diagnostic evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-diagnostics-${{ matrix.runner }}
+          path: ${{ runner.temp }}/considered-diagnostics
+          retention-days: 7
+          if-no-files-found: error
